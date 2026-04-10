@@ -594,43 +594,52 @@ function showPR(n,w){document.getElementById('prDetail').textContent=n+' — '+w
 let alarmAudio=null,alarmPlaying=false;
 
 function prerenderAlarm(){
-  // Render the entire techno track offline, convert to WAV blob, store as <audio>
-  const sr=44100,dur=10,len=sr*dur;
+  const sr=44100,dur=8,len=sr*dur;
   const offline=new OfflineAudioContext(1,len,sr);
-  const master=offline.createGain();master.gain.value=0.25;master.connect(offline.destination);
-  const bpm=138,step=60/bpm/4;
-  const AP=[
-    {n:130.81,s:0,a:1},{n:130.81,s:0,a:0},{n:261.63,s:196,a:1},{n:155.56,s:0,a:1},
-    {n:130.81,s:0,a:0},{n:174.61,s:130.81,a:1},{n:130.81,s:0,a:0},{n:261.63,s:311.13,a:1},
-    {n:130.81,s:0,a:1},{n:207.65,s:0,a:0},{n:155.56,s:261.63,a:1},{n:261.63,s:0,a:1},
-    {n:130.81,s:0,a:0},{n:174.61,s:0,a:1},{n:207.65,s:311.13,a:1},{n:392,s:0,a:1}
+  const master=offline.createGain();master.gain.value=0.35;master.connect(offline.destination);
+
+  // Clean alarm: 3 beeps, pause, repeat — like a gym timer
+  const beepFreqs=[880,1108,1320]; // A5, C#6, E6 — major triad
+  const pattern=[ // time, duration pairs for beep groups
+    // Group 1
+    0, 0.15, 0.25, 0.15, 0.5, 0.15,
+    // Group 2
+    1.0, 0.15, 1.25, 0.15, 1.5, 0.15,
+    // Group 3
+    2.0, 0.15, 2.25, 0.15, 2.5, 0.15,
+    // Group 4 - faster
+    3.2, 0.1, 3.4, 0.1, 3.6, 0.1, 3.8, 0.1,
+    // Group 5 - faster
+    4.2, 0.1, 4.4, 0.1, 4.6, 0.1, 4.8, 0.1,
+    // Group 6 - continuous urgent
+    5.2, 0.08, 5.35, 0.08, 5.5, 0.08, 5.65, 0.08, 5.8, 0.08, 5.95, 0.08,
+    // Final long
+    6.3, 0.5, 7.0, 0.8
   ];
-  const total=Math.ceil(dur/step);
-  for(let i=0;i<total;i++){
-    const s=i*step,p=AP[i%16],d=step*.8;
-    // Bass
-    const o=offline.createOscillator(),g=offline.createGain(),f=offline.createBiquadFilter();
-    o.connect(f);f.connect(g);g.connect(master);o.type='sawtooth';
-    o.frequency.setValueAtTime(p.n,s);if(p.s)o.frequency.exponentialRampToValueAtTime(p.s,s+d*.7);
-    f.type='lowpass';f.Q.value=15;f.frequency.setValueAtTime(p.a?4000:1800,s);f.frequency.exponentialRampToValueAtTime(200,s+d*.9);
-    g.gain.setValueAtTime(p.a?.4:.2,s);g.gain.exponentialRampToValueAtTime(.001,s+d);
-    o.start(s);o.stop(s+d+.05);
-    // Kick
-    if(i%4===0){const ok=offline.createOscillator(),gk=offline.createGain();ok.connect(gk);gk.connect(master);ok.type='sine';ok.frequency.setValueAtTime(150,s);ok.frequency.exponentialRampToValueAtTime(30,s+.15);gk.gain.setValueAtTime(.6,s);gk.gain.exponentialRampToValueAtTime(.001,s+.25);ok.start(s);ok.stop(s+.3)}
-    // Clap
-    if(i%8===4){const b=offline.createBuffer(1,sr*.06,sr),c=b.getChannelData(0);for(let j=0;j<c.length;j++)c[j]=(Math.random()*2-1)*.5;const bs=offline.createBufferSource(),gc=offline.createGain(),fc=offline.createBiquadFilter();bs.buffer=b;bs.connect(fc);fc.connect(gc);gc.connect(master);fc.type='bandpass';fc.frequency.value=1200;fc.Q.value=2;gc.gain.setValueAtTime(.3,s);gc.gain.exponentialRampToValueAtTime(.001,s+.08);bs.start(s)}
-    // Hat
-    if(i%2===0){const hl=.04;const hb=offline.createBuffer(1,sr*hl,sr),hc=hb.getChannelData(0);for(let j=0;j<hc.length;j++)hc[j]=(Math.random()*2-1)*.3;const hs=offline.createBufferSource(),hg=offline.createGain(),hf=offline.createBiquadFilter();hs.buffer=hb;hs.connect(hf);hf.connect(hg);hg.connect(master);hf.type='highpass';hf.frequency.value=8000;hg.gain.setValueAtTime(.15,s);hg.gain.exponentialRampToValueAtTime(.001,s+hl);hs.start(s)}
+
+  for(let i=0;i<pattern.length;i+=2){
+    const t=pattern[i],d=pattern[i+1];
+    beepFreqs.forEach((freq,fi)=>{
+      const o=offline.createOscillator(),g=offline.createGain();
+      o.connect(g);g.connect(master);
+      o.type=fi===0?'sine':'sine';
+      o.frequency.value=freq;
+      g.gain.setValueAtTime(0,t);
+      g.gain.linearRampToValueAtTime(fi===0?.5:.2,t+.01);
+      g.gain.setValueAtTime(fi===0?.5:.2,t+d-.02);
+      g.gain.linearRampToValueAtTime(0,t+d);
+      o.start(t);o.stop(t+d+.01);
+    });
   }
+
   offline.startRendering().then(buffer=>{
-    // Convert AudioBuffer to WAV blob
-    const numCh=1,sr2=buffer.sampleRate,samples=buffer.getChannelData(0);
+    const samples=buffer.getChannelData(0);
     const wavLen=44+samples.length*2,wav=new ArrayBuffer(wavLen),v=new DataView(wav);
     function ws(o,s){for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))}
     ws(0,'RIFF');v.setUint32(4,wavLen-8,true);ws(8,'WAVE');ws(12,'fmt ');
-    v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,numCh,true);
-    v.setUint32(24,sr2,true);v.setUint32(28,sr2*numCh*2,true);
-    v.setUint16(32,numCh*2,true);v.setUint16(34,16,true);
+    v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+    v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);
+    v.setUint16(32,2,true);v.setUint16(34,16,true);
     ws(36,'data');v.setUint32(40,samples.length*2,true);
     for(let i=0;i<samples.length;i++){const s=Math.max(-1,Math.min(1,samples[i]));v.setInt16(44+i*2,s<0?s*0x8000:s*0x7FFF,true)}
     const blob=new Blob([wav],{type:'audio/wav'});
@@ -644,7 +653,7 @@ function playBeep(){
   alarmPlaying=true;
   alarmAudio.currentTime=0;
   alarmAudio.play().catch(()=>{});
-  setTimeout(()=>{alarmPlaying=false},10500);
+  setTimeout(()=>{alarmPlaying=false},9000);
 }
 function stopAlarm(){
   if(alarmAudio){alarmAudio.pause();alarmAudio.currentTime=0}
