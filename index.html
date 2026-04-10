@@ -591,86 +591,35 @@ function fireConfetti(){const c=document.getElementById('confetti'),x=c.getConte
 function showPR(n,w){document.getElementById('prDetail').textContent=n+' — '+w+'kg';const b=document.getElementById('prBanner');b.classList.add('show');fireConfetti();if(navigator.vibrate)navigator.vibrate([100,50,100,50,200]);setTimeout(()=>b.classList.remove('show'),2500)}
 
 // ═══ REST TIMER ═══
-let alarmCtx=null,alarmPlaying=false;
+let alarmCtx=null,alarmPlaying=false,alarmLoop=null,alarmStep=0;
 function ensureAudioCtx(){if(!alarmCtx||alarmCtx.state==='closed')alarmCtx=new(window.AudioContext||window.webkitAudioContext)();if(alarmCtx.state==='suspended')alarmCtx.resume();return alarmCtx}
-function playBeep(){
-  if(alarmPlaying)return;alarmPlaying=true;
-  try{
-    const ctx=ensureAudioCtx();alarmCtx=ctx;
-    const ctx=alarmCtx,t=ctx.currentTime,bpm=138,step=60/bpm/4,total=Math.ceil(10/(step*16))*16;
-    const master=ctx.createGain();master.gain.value=.7;master.connect(ctx.destination);
 
-    function acid(freq,start,dur,slideTo,accent){
-      const o=ctx.createOscillator(),g=ctx.createGain(),f=ctx.createBiquadFilter();
-      o.connect(f);f.connect(g);g.connect(master);
-      o.type='sawtooth';
-      o.frequency.setValueAtTime(freq,t+start);
-      if(slideTo)o.frequency.exponentialRampToValueAtTime(slideTo,t+start+dur*.7);
-      f.type='lowpass';f.Q.value=22;
-      const cutoff=accent?6000:2500;
-      f.frequency.setValueAtTime(cutoff,t+start);
-      f.frequency.exponentialRampToValueAtTime(120,t+start+dur*.9);
-      const vol=accent?.35:.2;
-      g.gain.setValueAtTime(0,t+start);
-      g.gain.linearRampToValueAtTime(vol,t+start+.005);
-      g.gain.setValueAtTime(vol*.7,t+start+dur*.4);
-      g.gain.exponentialRampToValueAtTime(.001,t+start+dur);
-      o.start(t+start);o.stop(t+start+dur+.05);
-    }
-    function kick(start){
-      const o=ctx.createOscillator(),g=ctx.createGain();
-      o.connect(g);g.connect(master);o.type='sine';
-      o.frequency.setValueAtTime(180,t+start);
-      o.frequency.exponentialRampToValueAtTime(25,t+start+.25);
-      g.gain.setValueAtTime(.6,t+start);
-      g.gain.exponentialRampToValueAtTime(.001,t+start+.35);
-      o.start(t+start);o.stop(t+start+.5);
-    }
-    function hat(start,len){
-      const buf=ctx.createBuffer(1,ctx.sampleRate*len,ctx.sampleRate),ch=buf.getChannelData(0);
-      for(let i=0;i<ch.length;i++)ch[i]=(Math.random()*2-1);
-      const s=ctx.createBufferSource(),g=ctx.createGain(),f=ctx.createBiquadFilter();
-      s.buffer=buf;s.connect(f);f.connect(g);g.connect(master);
-      f.type='highpass';f.frequency.value=9000;
-      g.gain.setValueAtTime(.12,t+start);
-      g.gain.exponentialRampToValueAtTime(.001,t+start+len);
-      s.start(t+start);
-    }
-    function clap(start){
-      const buf=ctx.createBuffer(1,ctx.sampleRate*.08,ctx.sampleRate),ch=buf.getChannelData(0);
-      for(let i=0;i<ch.length;i++)ch[i]=(Math.random()*2-1);
-      const s=ctx.createBufferSource(),g=ctx.createGain(),f=ctx.createBiquadFilter();
-      s.buffer=buf;s.connect(f);f.connect(g);g.connect(master);
-      f.type='bandpass';f.frequency.value=1500;f.Q.value=3;
-      g.gain.setValueAtTime(.25,t+start);
-      g.gain.exponentialRampToValueAtTime(.001,t+start+.12);
-      s.start(t+start);
-    }
-
-    // Acid pattern - C minor pentatonic, 16 steps looped
-    const pattern=[
-      {n:65.41,s:0,a:1},{n:65.41,s:0,a:0},{n:130.81,s:98,a:1},{n:77.78,s:0,a:1},
-      {n:65.41,s:0,a:0},{n:87.31,s:65.41,a:1},{n:65.41,s:0,a:0},{n:130.81,s:155.56,a:1},
-      {n:65.41,s:0,a:1},{n:103.83,s:0,a:0},{n:77.78,s:130.81,a:1},{n:130.81,s:0,a:1},
-      {n:65.41,s:0,a:0},{n:87.31,s:0,a:1},{n:103.83,s:155.56,a:1},{n:196,s:0,a:1}
-    ];
-
-    for(let i=0;i<total;i++){
-      const s=i*step;
-      const p=pattern[i%16];
-      acid(p.n,s,step*1.1,p.s||0,p.a);
-      if(i%4===0)kick(s);
-      if(i%8===4)clap(s);
-      hat(s,i%2===0?.06:.03);
-    }
-
-    // Auto-stop after ~10s
-    setTimeout(()=>{stopAlarm()},10500);
-  }catch{alarmPlaying=false}
+const AP=[
+  {n:65.41,s:0,a:1},{n:65.41,s:0,a:0},{n:130.81,s:98,a:1},{n:77.78,s:0,a:1},
+  {n:65.41,s:0,a:0},{n:87.31,s:65.41,a:1},{n:65.41,s:0,a:0},{n:130.81,s:155.56,a:1},
+  {n:65.41,s:0,a:1},{n:103.83,s:0,a:0},{n:77.78,s:130.81,a:1},{n:130.81,s:0,a:1},
+  {n:65.41,s:0,a:0},{n:87.31,s:0,a:1},{n:103.83,s:155.56,a:1},{n:196,s:0,a:1}
+];
+function tickAlarm(){
+  const ctx=alarmCtx;if(!ctx)return;
+  const t=ctx.currentTime,p=AP[alarmStep%16],dur=.11;
+  // Bass
+  const o=ctx.createOscillator(),g=ctx.createGain(),f=ctx.createBiquadFilter();
+  o.connect(f);f.connect(g);g.connect(ctx.destination);o.type='sawtooth';
+  o.frequency.setValueAtTime(p.n,t);if(p.s)o.frequency.exponentialRampToValueAtTime(p.s,t+dur*.7);
+  f.type='lowpass';f.Q.value=22;f.frequency.setValueAtTime(p.a?6000:2500,t);f.frequency.exponentialRampToValueAtTime(120,t+dur*.9);
+  g.gain.setValueAtTime(p.a?.3:.15,t);g.gain.exponentialRampToValueAtTime(.001,t+dur);
+  o.start(t);o.stop(t+dur+.05);
+  // Kick
+  if(alarmStep%4===0){const ok=ctx.createOscillator(),gk=ctx.createGain();ok.connect(gk);gk.connect(ctx.destination);ok.type='sine';ok.frequency.setValueAtTime(180,t);ok.frequency.exponentialRampToValueAtTime(25,t+.2);gk.gain.setValueAtTime(.5,t);gk.gain.exponentialRampToValueAtTime(.001,t+.3);ok.start(t);ok.stop(t+.4)}
+  // Clap
+  if(alarmStep%8===4){const b=ctx.createBuffer(1,ctx.sampleRate*.08,ctx.sampleRate),c=b.getChannelData(0);for(let i=0;i<c.length;i++)c[i]=Math.random()*2-1;const s=ctx.createBufferSource(),gc=ctx.createGain(),fc=ctx.createBiquadFilter();s.buffer=b;s.connect(fc);fc.connect(gc);gc.connect(ctx.destination);fc.type='bandpass';fc.frequency.value=1500;fc.Q.value=3;gc.gain.setValueAtTime(.2,t);gc.gain.exponentialRampToValueAtTime(.001,t+.1);s.start(t)}
+  // Hat
+  const hl=alarmStep%2===0?.06:.03;const hb=ctx.createBuffer(1,ctx.sampleRate*hl,ctx.sampleRate),hc=hb.getChannelData(0);for(let i=0;i<hc.length;i++)hc[i]=Math.random()*2-1;const hs=ctx.createBufferSource(),hg=ctx.createGain(),hf=ctx.createBiquadFilter();hs.buffer=hb;hs.connect(hf);hf.connect(hg);hg.connect(ctx.destination);hf.type='highpass';hf.frequency.value=9000;hg.gain.setValueAtTime(.1,t);hg.gain.exponentialRampToValueAtTime(.001,t+hl);hs.start(t);
+  alarmStep++;if(alarmStep>=93)stopAlarm();
 }
-function stopAlarm(){
-  if(alarmCtx){try{alarmCtx.close()}catch{}}alarmCtx=null;alarmPlaying=false;
-}
+function playBeep(){if(alarmPlaying)return;alarmPlaying=true;alarmStep=0;ensureAudioCtx();alarmLoop=setInterval(tickAlarm,108)}
+function stopAlarm(){clearInterval(alarmLoop);alarmLoop=null;alarmPlaying=false;alarmStep=0}
 function rtStart(){ensureAudioCtx();rtSeconds=settings().restTime||180;rtUpdate();document.getElementById('restTimer').classList.add('show');document.getElementById('rtStartBtn').style.display='none';clearInterval(rtInterval);rtInterval=setInterval(()=>{rtSeconds--;rtUpdate();if(rtSeconds<=0){clearInterval(rtInterval);playBeep();if(navigator.vibrate)navigator.vibrate([300,100,300,100,300]);document.getElementById('rtTime').style.color='#ff4d4d'}},1000)}
 function rtUpdate(){const m=Math.floor(Math.abs(rtSeconds)/60),s=Math.abs(rtSeconds)%60;document.getElementById('rtTime').textContent=(rtSeconds<0?'-':'')+m+':'+String(s).padStart(2,'0');document.getElementById('rtTime').style.color=rtSeconds<=0?'#ff4d4d':'var(--accent)'}
 function rtAddTime(n){rtSeconds+=n;if(rtSeconds<0)rtSeconds=0;rtUpdate()}
