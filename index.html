@@ -591,51 +591,68 @@ function fireConfetti(){const c=document.getElementById('confetti'),x=c.getConte
 function showPR(n,w){document.getElementById('prDetail').textContent=n+' — '+w+'kg';const b=document.getElementById('prBanner');b.classList.add('show');fireConfetti();if(navigator.vibrate)navigator.vibrate([100,50,100,50,200]);setTimeout(()=>b.classList.remove('show'),2500)}
 
 // ═══ REST TIMER ═══
-let alarmCtx=null,alarmPlaying=false,alarmLoop=null,alarmStep=0,keepAlive=null;
-function ensureAudioCtx(){
-  if(!alarmCtx||alarmCtx.state==='closed')alarmCtx=new(window.AudioContext||window.webkitAudioContext)();
-  if(alarmCtx.state==='suspended')alarmCtx.resume();
-  // Keep alive: silent buffer loop so iOS doesn't suspend the context
-  if(!keepAlive){
-    const buf=alarmCtx.createBuffer(1,alarmCtx.sampleRate,alarmCtx.sampleRate);
-    keepAlive=alarmCtx.createBufferSource();
-    keepAlive.buffer=buf;keepAlive.loop=true;
-    keepAlive.connect(alarmCtx.destination);
-    keepAlive.start();
+let alarmAudio=null,alarmPlaying=false;
+
+function prerenderAlarm(){
+  // Render the entire techno track offline, convert to WAV blob, store as <audio>
+  const sr=44100,dur=10,len=sr*dur;
+  const offline=new OfflineAudioContext(1,len,sr);
+  const bpm=138,step=60/bpm/4;
+  const AP=[
+    {n:65.41,s:0,a:1},{n:65.41,s:0,a:0},{n:130.81,s:98,a:1},{n:77.78,s:0,a:1},
+    {n:65.41,s:0,a:0},{n:87.31,s:65.41,a:1},{n:65.41,s:0,a:0},{n:130.81,s:155.56,a:1},
+    {n:65.41,s:0,a:1},{n:103.83,s:0,a:0},{n:77.78,s:130.81,a:1},{n:130.81,s:0,a:1},
+    {n:65.41,s:0,a:0},{n:87.31,s:0,a:1},{n:103.83,s:155.56,a:1},{n:196,s:0,a:1}
+  ];
+  const total=Math.ceil(dur/step);
+  for(let i=0;i<total;i++){
+    const s=i*step,p=AP[i%16],d=step*.9;
+    // Bass
+    const o=offline.createOscillator(),g=offline.createGain(),f=offline.createBiquadFilter();
+    o.connect(f);f.connect(g);g.connect(offline.destination);o.type='sawtooth';
+    o.frequency.setValueAtTime(p.n,s);if(p.s)o.frequency.exponentialRampToValueAtTime(p.s,s+d*.7);
+    f.type='lowpass';f.Q.value=22;f.frequency.setValueAtTime(p.a?6000:2500,s);f.frequency.exponentialRampToValueAtTime(120,s+d*.9);
+    g.gain.setValueAtTime(p.a?.3:.15,s);g.gain.exponentialRampToValueAtTime(.001,s+d);
+    o.start(s);o.stop(s+d+.05);
+    // Kick
+    if(i%4===0){const ok=offline.createOscillator(),gk=offline.createGain();ok.connect(gk);gk.connect(offline.destination);ok.type='sine';ok.frequency.setValueAtTime(180,s);ok.frequency.exponentialRampToValueAtTime(25,s+.2);gk.gain.setValueAtTime(.5,s);gk.gain.exponentialRampToValueAtTime(.001,s+.3);ok.start(s);ok.stop(s+.4)}
+    // Clap
+    if(i%8===4){const b=offline.createBuffer(1,sr*.08,sr),c=b.getChannelData(0);for(let j=0;j<c.length;j++)c[j]=Math.random()*2-1;const bs=offline.createBufferSource(),gc=offline.createGain(),fc=offline.createBiquadFilter();bs.buffer=b;bs.connect(fc);fc.connect(gc);gc.connect(offline.destination);fc.type='bandpass';fc.frequency.value=1500;fc.Q.value=3;gc.gain.setValueAtTime(.2,s);gc.gain.exponentialRampToValueAtTime(.001,s+.1);bs.start(s)}
+    // Hat
+    const hl=i%2===0?.06:.03;const hb=offline.createBuffer(1,sr*hl,sr),hc=hb.getChannelData(0);for(let j=0;j<hc.length;j++)hc[j]=Math.random()*2-1;const hs=offline.createBufferSource(),hg=offline.createGain(),hf=offline.createBiquadFilter();hs.buffer=hb;hs.connect(hf);hf.connect(hg);hg.connect(offline.destination);hf.type='highpass';hf.frequency.value=9000;hg.gain.setValueAtTime(.1,s);hg.gain.exponentialRampToValueAtTime(.001,s+hl);hs.start(s);
   }
-  return alarmCtx;
+  offline.startRendering().then(buffer=>{
+    // Convert AudioBuffer to WAV blob
+    const numCh=1,sr2=buffer.sampleRate,samples=buffer.getChannelData(0);
+    const wavLen=44+samples.length*2,wav=new ArrayBuffer(wavLen),v=new DataView(wav);
+    function ws(o,s){for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))}
+    ws(0,'RIFF');v.setUint32(4,wavLen-8,true);ws(8,'WAVE');ws(12,'fmt ');
+    v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,numCh,true);
+    v.setUint32(24,sr2,true);v.setUint32(28,sr2*numCh*2,true);
+    v.setUint16(32,numCh*2,true);v.setUint16(34,16,true);
+    ws(36,'data');v.setUint32(40,samples.length*2,true);
+    for(let i=0;i<samples.length;i++){const s=Math.max(-1,Math.min(1,samples[i]));v.setInt16(44+i*2,s<0?s*0x8000:s*0x7FFF,true)}
+    const blob=new Blob([wav],{type:'audio/wav'});
+    alarmAudio=new Audio(URL.createObjectURL(blob));
+    alarmAudio.loop=false;
+  });
 }
 
-const AP=[
-  {n:65.41,s:0,a:1},{n:65.41,s:0,a:0},{n:130.81,s:98,a:1},{n:77.78,s:0,a:1},
-  {n:65.41,s:0,a:0},{n:87.31,s:65.41,a:1},{n:65.41,s:0,a:0},{n:130.81,s:155.56,a:1},
-  {n:65.41,s:0,a:1},{n:103.83,s:0,a:0},{n:77.78,s:130.81,a:1},{n:130.81,s:0,a:1},
-  {n:65.41,s:0,a:0},{n:87.31,s:0,a:1},{n:103.83,s:155.56,a:1},{n:196,s:0,a:1}
-];
-function tickAlarm(){
-  const ctx=alarmCtx;if(!ctx)return;
-  const t=ctx.currentTime,p=AP[alarmStep%16],dur=.11;
-  // Bass
-  const o=ctx.createOscillator(),g=ctx.createGain(),f=ctx.createBiquadFilter();
-  o.connect(f);f.connect(g);g.connect(ctx.destination);o.type='sawtooth';
-  o.frequency.setValueAtTime(p.n,t);if(p.s)o.frequency.exponentialRampToValueAtTime(p.s,t+dur*.7);
-  f.type='lowpass';f.Q.value=22;f.frequency.setValueAtTime(p.a?6000:2500,t);f.frequency.exponentialRampToValueAtTime(120,t+dur*.9);
-  g.gain.setValueAtTime(p.a?.3:.15,t);g.gain.exponentialRampToValueAtTime(.001,t+dur);
-  o.start(t);o.stop(t+dur+.05);
-  // Kick
-  if(alarmStep%4===0){const ok=ctx.createOscillator(),gk=ctx.createGain();ok.connect(gk);gk.connect(ctx.destination);ok.type='sine';ok.frequency.setValueAtTime(180,t);ok.frequency.exponentialRampToValueAtTime(25,t+.2);gk.gain.setValueAtTime(.5,t);gk.gain.exponentialRampToValueAtTime(.001,t+.3);ok.start(t);ok.stop(t+.4)}
-  // Clap
-  if(alarmStep%8===4){const b=ctx.createBuffer(1,ctx.sampleRate*.08,ctx.sampleRate),c=b.getChannelData(0);for(let i=0;i<c.length;i++)c[i]=Math.random()*2-1;const s=ctx.createBufferSource(),gc=ctx.createGain(),fc=ctx.createBiquadFilter();s.buffer=b;s.connect(fc);fc.connect(gc);gc.connect(ctx.destination);fc.type='bandpass';fc.frequency.value=1500;fc.Q.value=3;gc.gain.setValueAtTime(.2,t);gc.gain.exponentialRampToValueAtTime(.001,t+.1);s.start(t)}
-  // Hat
-  const hl=alarmStep%2===0?.06:.03;const hb=ctx.createBuffer(1,ctx.sampleRate*hl,ctx.sampleRate),hc=hb.getChannelData(0);for(let i=0;i<hc.length;i++)hc[i]=Math.random()*2-1;const hs=ctx.createBufferSource(),hg=ctx.createGain(),hf=ctx.createBiquadFilter();hs.buffer=hb;hs.connect(hf);hf.connect(hg);hg.connect(ctx.destination);hf.type='highpass';hf.frequency.value=9000;hg.gain.setValueAtTime(.1,t);hg.gain.exponentialRampToValueAtTime(.001,t+hl);hs.start(t);
-  alarmStep++;if(alarmStep>=93)stopAlarm();
+function playBeep(){
+  if(alarmPlaying||!alarmAudio)return;
+  alarmPlaying=true;
+  alarmAudio.currentTime=0;
+  alarmAudio.play().catch(()=>{});
+  setTimeout(()=>{alarmPlaying=false},10500);
 }
-function playBeep(){if(alarmPlaying)return;alarmPlaying=true;alarmStep=0;ensureAudioCtx();alarmLoop=setInterval(tickAlarm,108)}
-function stopAlarm(){clearInterval(alarmLoop);alarmLoop=null;alarmPlaying=false;alarmStep=0}
-function rtStart(){ensureAudioCtx();rtSeconds=180;rtUpdate();document.getElementById('restTimer').classList.add('show');const sb=document.getElementById('rtStartBtn');sb.style.display='none';sb.style.opacity='0';sb.style.position='absolute';sb.style.left='-9999px';clearInterval(rtInterval);rtInterval=setInterval(()=>{rtSeconds--;rtUpdate();if(rtSeconds<=0){clearInterval(rtInterval);playBeep();if(navigator.vibrate)navigator.vibrate([300,100,300,100,300]);document.getElementById('rtTime').style.color='#ff4d4d'}},1000)}
+function stopAlarm(){
+  if(alarmAudio){alarmAudio.pause();alarmAudio.currentTime=0}
+  alarmPlaying=false;
+}
+function rtStart(){if(!alarmAudio)prerenderAlarm();rtSeconds=180;rtUpdate();document.getElementById('restTimer').classList.add('show');const sb=document.getElementById('rtStartBtn');sb.style.display='none';sb.style.opacity='0';sb.style.position='absolute';sb.style.left='-9999px';clearInterval(rtInterval);rtInterval=setInterval(()=>{rtSeconds--;rtUpdate();if(rtSeconds<=0){clearInterval(rtInterval);playBeep();if(navigator.vibrate)navigator.vibrate([300,100,300,100,300]);document.getElementById('rtTime').style.color='#ff4d4d'}},1000)}
 function rtUpdate(){const m=Math.floor(Math.abs(rtSeconds)/60),s=Math.abs(rtSeconds)%60;document.getElementById('rtTime').textContent=(rtSeconds<0?'-':'')+m+':'+String(s).padStart(2,'0');document.getElementById('rtTime').style.color=rtSeconds<=0?'#ff4d4d':'var(--accent)'}
 function rtAddTime(n){rtSeconds+=n;if(rtSeconds<0)rtSeconds=0;rtUpdate()}
-function rtStop(){clearInterval(rtInterval);stopAlarm();if(keepAlive){try{keepAlive.stop()}catch{}keepAlive=null}document.getElementById('restTimer').classList.remove('show');const sb=document.getElementById('rtStartBtn');sb.style.display='flex';sb.style.opacity='1';sb.style.position='fixed';sb.style.left='auto';sb.style.right='16px'}
+function rtStop(){clearInterval(rtInterval);stopAlarm();document.getElementById('restTimer').classList.remove('show');const sb=document.getElementById('rtStartBtn');sb.style.display='flex';sb.style.opacity='1';sb.style.position='fixed';sb.style.left='auto';sb.style.right='16px'}
 
 // ═══ WORKOUT TIMER ═══
 function startWkTimer(){if(wkTimer)return;wkStartTime=wkStartTime||Date.now();wkTimer=setInterval(()=>{const d=Math.floor((Date.now()-wkStartTime)/1000);const m=Math.floor(d/60),s=d%60;document.getElementById('wk-duration').textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')},1000)}
@@ -764,7 +781,7 @@ function addS(eid){const c=document.getElementById('sets-'+eid);c.insertAdjacent
 function delS(eid,btn){const c=document.getElementById('sets-'+eid);if(c.querySelectorAll('.set-grid').length<=1)return;btn.closest('.set-grid').nextElementSibling.remove();btn.closest('.set-grid').remove();let n=1;c.querySelectorAll('.set-num').forEach(el=>{el.textContent=n++})}
 
 function saveEx(eid){
-  ensureAudioCtx();
+  if(!alarmAudio)prerenderAlarm();
   const grids=document.querySelectorAll(`#sets-${eid} .set-grid`);const sets=[];
   grids.forEach((g,i)=>{const w=g.querySelector('[data-f="w"]').value,r=g.querySelector('[data-f="r"]').value;const warmupEl=g.nextElementSibling;const isWarmup=warmupEl&&warmupEl.classList.contains('active');if(w&&r)sets.push({weight:parseFloat(w),reps:parseInt(r),warmup:!!isWarmup})});
   if(!sets.length){toast('Ingresa al menos 1 serie');return}
