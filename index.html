@@ -305,7 +305,7 @@ select,input,button,textarea{font-size:16px!important}
 <!-- REST TIMER -->
 <button id="rtStartBtn" onclick="rtStart()" style="position:fixed;bottom:24px;right:16px;z-index:148;width:52px;height:52px;border-radius:50%;background:var(--accent);border:none;color:#050505;font-size:22px;cursor:pointer;box-shadow:0 4px 20px rgba(200,255,0,.3);display:flex;align-items:center;justify-content:center;visibility:visible">⏱</button>
 <div class="rest-timer" id="restTimer">
-  <div><div class="rt-label">Descanso</div><div class="rt-time" id="rtTime">3:00</div></div>
+  <div><div class="rt-label">Descanso</div><div class="rt-time" id="rtTime">3:00</div><div style="font-size:8px;color:var(--gray3);margin-top:2px">3 min</div></div>
   <div class="rt-btns">
     <button class="rt-btn" onclick="rtAddTime(-15)">-15</button>
     <button class="rt-btn" onclick="rtAddTime(15)">+15</button>
@@ -632,10 +632,10 @@ function tickAlarm(){
 }
 function playBeep(){if(alarmPlaying)return;alarmPlaying=true;alarmStep=0;ensureAudioCtx();alarmLoop=setInterval(tickAlarm,108)}
 function stopAlarm(){clearInterval(alarmLoop);alarmLoop=null;alarmPlaying=false;alarmStep=0}
-function rtStart(){ensureAudioCtx();rtSeconds=settings().restTime||180;rtUpdate();document.getElementById('restTimer').classList.add('show');const sb=document.getElementById('rtStartBtn');sb.style.visibility='hidden';sb.style.pointerEvents='none';clearInterval(rtInterval);rtInterval=setInterval(()=>{rtSeconds--;rtUpdate();if(rtSeconds<=0){clearInterval(rtInterval);playBeep();if(navigator.vibrate)navigator.vibrate([300,100,300,100,300]);document.getElementById('rtTime').style.color='#ff4d4d'}},1000)}
+function rtStart(){ensureAudioCtx();rtSeconds=180;rtUpdate();document.getElementById('restTimer').classList.add('show');const sb=document.getElementById('rtStartBtn');sb.style.display='none';sb.style.opacity='0';sb.style.position='absolute';sb.style.left='-9999px';clearInterval(rtInterval);rtInterval=setInterval(()=>{rtSeconds--;rtUpdate();if(rtSeconds<=0){clearInterval(rtInterval);playBeep();if(navigator.vibrate)navigator.vibrate([300,100,300,100,300]);document.getElementById('rtTime').style.color='#ff4d4d'}},1000)}
 function rtUpdate(){const m=Math.floor(Math.abs(rtSeconds)/60),s=Math.abs(rtSeconds)%60;document.getElementById('rtTime').textContent=(rtSeconds<0?'-':'')+m+':'+String(s).padStart(2,'0');document.getElementById('rtTime').style.color=rtSeconds<=0?'#ff4d4d':'var(--accent)'}
 function rtAddTime(n){rtSeconds+=n;if(rtSeconds<0)rtSeconds=0;rtUpdate()}
-function rtStop(){clearInterval(rtInterval);stopAlarm();if(keepAlive){try{keepAlive.stop()}catch{}keepAlive=null}document.getElementById('restTimer').classList.remove('show');const sb=document.getElementById('rtStartBtn');sb.style.visibility='visible';sb.style.pointerEvents='auto'}
+function rtStop(){clearInterval(rtInterval);stopAlarm();if(keepAlive){try{keepAlive.stop()}catch{}keepAlive=null}document.getElementById('restTimer').classList.remove('show');const sb=document.getElementById('rtStartBtn');sb.style.display='flex';sb.style.opacity='1';sb.style.position='fixed';sb.style.left='auto';sb.style.right='16px'}
 
 // ═══ WORKOUT TIMER ═══
 function startWkTimer(){if(wkTimer)return;wkStartTime=wkStartTime||Date.now();wkTimer=setInterval(()=>{const d=Math.floor((Date.now()-wkStartTime)/1000);const m=Math.floor(d/60),s=d%60;document.getElementById('wk-duration').textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')},1000)}
