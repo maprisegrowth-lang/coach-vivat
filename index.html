@@ -591,8 +591,19 @@ function fireConfetti(){const c=document.getElementById('confetti'),x=c.getConte
 function showPR(n,w){document.getElementById('prDetail').textContent=n+' — '+w+'kg';const b=document.getElementById('prBanner');b.classList.add('show');fireConfetti();if(navigator.vibrate)navigator.vibrate([100,50,100,50,200]);setTimeout(()=>b.classList.remove('show'),2500)}
 
 // ═══ REST TIMER ═══
-let alarmCtx=null,alarmPlaying=false,alarmLoop=null,alarmStep=0;
-function ensureAudioCtx(){if(!alarmCtx||alarmCtx.state==='closed')alarmCtx=new(window.AudioContext||window.webkitAudioContext)();if(alarmCtx.state==='suspended')alarmCtx.resume();return alarmCtx}
+let alarmCtx=null,alarmPlaying=false,alarmLoop=null,alarmStep=0,keepAlive=null;
+function ensureAudioCtx(){
+  if(!alarmCtx||alarmCtx.state==='closed')alarmCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(alarmCtx.state==='suspended')alarmCtx.resume();
+  // Keep alive: silent oscillator so iOS doesn't suspend the context
+  if(!keepAlive){
+    keepAlive=alarmCtx.createOscillator();
+    const g=alarmCtx.createGain();g.gain.value=0.001;
+    keepAlive.connect(g);g.connect(alarmCtx.destination);
+    keepAlive.start();
+  }
+  return alarmCtx;
+}
 
 const AP=[
   {n:65.41,s:0,a:1},{n:65.41,s:0,a:0},{n:130.81,s:98,a:1},{n:77.78,s:0,a:1},
@@ -619,7 +630,7 @@ function tickAlarm(){
   alarmStep++;if(alarmStep>=93)stopAlarm();
 }
 function playBeep(){if(alarmPlaying)return;alarmPlaying=true;alarmStep=0;ensureAudioCtx();alarmLoop=setInterval(tickAlarm,108)}
-function stopAlarm(){clearInterval(alarmLoop);alarmLoop=null;alarmPlaying=false;alarmStep=0}
+function stopAlarm(){clearInterval(alarmLoop);alarmLoop=null;alarmPlaying=false;alarmStep=0;if(keepAlive){try{keepAlive.stop()}catch{}keepAlive=null}}
 function rtStart(){ensureAudioCtx();rtSeconds=settings().restTime||180;rtUpdate();document.getElementById('restTimer').classList.add('show');document.getElementById('rtStartBtn').style.display='none';clearInterval(rtInterval);rtInterval=setInterval(()=>{rtSeconds--;rtUpdate();if(rtSeconds<=0){clearInterval(rtInterval);playBeep();if(navigator.vibrate)navigator.vibrate([300,100,300,100,300]);document.getElementById('rtTime').style.color='#ff4d4d'}},1000)}
 function rtUpdate(){const m=Math.floor(Math.abs(rtSeconds)/60),s=Math.abs(rtSeconds)%60;document.getElementById('rtTime').textContent=(rtSeconds<0?'-':'')+m+':'+String(s).padStart(2,'0');document.getElementById('rtTime').style.color=rtSeconds<=0?'#ff4d4d':'var(--accent)'}
 function rtAddTime(n){rtSeconds+=n;if(rtSeconds<0)rtSeconds=0;rtUpdate()}
