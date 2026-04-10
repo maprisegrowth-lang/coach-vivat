@@ -546,7 +546,7 @@ const TIMER_OPTS=[60,90,120,180];
 
 const K='gymlog_v2',BK='gymlog_bw',SK='gymlog_settings',CK='gymlog_custom';
 let curR='push',chart=null,bwChart=null,donutChart=null,calMonth=new Date();
-let rtInterval=null,rtSeconds=90,wkStartTime=null,wkTimer=null;
+let rtInterval=null,rtSeconds=180,wkStartTime=null,wkTimer=null;
 
 const db=()=>{try{return JSON.parse(localStorage.getItem(K))||{}}catch{return{}}};
 const sv=d=>localStorage.setItem(K,JSON.stringify(d));
@@ -631,11 +631,11 @@ function tickAlarm(){
   alarmStep++;if(alarmStep>=93)stopAlarm();
 }
 function playBeep(){if(alarmPlaying)return;alarmPlaying=true;alarmStep=0;ensureAudioCtx();alarmLoop=setInterval(tickAlarm,108)}
-function stopAlarm(){clearInterval(alarmLoop);alarmLoop=null;alarmPlaying=false;alarmStep=0;if(keepAlive){try{keepAlive.stop()}catch{}keepAlive=null}}
+function stopAlarm(){clearInterval(alarmLoop);alarmLoop=null;alarmPlaying=false;alarmStep=0}
 function rtStart(){ensureAudioCtx();rtSeconds=settings().restTime||180;rtUpdate();document.getElementById('restTimer').classList.add('show');const sb=document.getElementById('rtStartBtn');sb.style.visibility='hidden';sb.style.pointerEvents='none';clearInterval(rtInterval);rtInterval=setInterval(()=>{rtSeconds--;rtUpdate();if(rtSeconds<=0){clearInterval(rtInterval);playBeep();if(navigator.vibrate)navigator.vibrate([300,100,300,100,300]);document.getElementById('rtTime').style.color='#ff4d4d'}},1000)}
 function rtUpdate(){const m=Math.floor(Math.abs(rtSeconds)/60),s=Math.abs(rtSeconds)%60;document.getElementById('rtTime').textContent=(rtSeconds<0?'-':'')+m+':'+String(s).padStart(2,'0');document.getElementById('rtTime').style.color=rtSeconds<=0?'#ff4d4d':'var(--accent)'}
 function rtAddTime(n){rtSeconds+=n;if(rtSeconds<0)rtSeconds=0;rtUpdate()}
-function rtStop(){clearInterval(rtInterval);stopAlarm();document.getElementById('restTimer').classList.remove('show');const sb=document.getElementById('rtStartBtn');sb.style.visibility='visible';sb.style.pointerEvents='auto'}
+function rtStop(){clearInterval(rtInterval);stopAlarm();if(keepAlive){try{keepAlive.stop()}catch{}keepAlive=null}document.getElementById('restTimer').classList.remove('show');const sb=document.getElementById('rtStartBtn');sb.style.visibility='visible';sb.style.pointerEvents='auto'}
 
 // ═══ WORKOUT TIMER ═══
 function startWkTimer(){if(wkTimer)return;wkStartTime=wkStartTime||Date.now();wkTimer=setInterval(()=>{const d=Math.floor((Date.now()-wkStartTime)/1000);const m=Math.floor(d/60),s=d%60;document.getElementById('wk-duration').textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')},1000)}
