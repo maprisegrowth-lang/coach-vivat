@@ -597,29 +597,30 @@ function prerenderAlarm(){
   // Render the entire techno track offline, convert to WAV blob, store as <audio>
   const sr=44100,dur=10,len=sr*dur;
   const offline=new OfflineAudioContext(1,len,sr);
+  const master=offline.createGain();master.gain.value=0.25;master.connect(offline.destination);
   const bpm=138,step=60/bpm/4;
   const AP=[
-    {n:65.41,s:0,a:1},{n:65.41,s:0,a:0},{n:130.81,s:98,a:1},{n:77.78,s:0,a:1},
-    {n:65.41,s:0,a:0},{n:87.31,s:65.41,a:1},{n:65.41,s:0,a:0},{n:130.81,s:155.56,a:1},
-    {n:65.41,s:0,a:1},{n:103.83,s:0,a:0},{n:77.78,s:130.81,a:1},{n:130.81,s:0,a:1},
-    {n:65.41,s:0,a:0},{n:87.31,s:0,a:1},{n:103.83,s:155.56,a:1},{n:196,s:0,a:1}
+    {n:130.81,s:0,a:1},{n:130.81,s:0,a:0},{n:261.63,s:196,a:1},{n:155.56,s:0,a:1},
+    {n:130.81,s:0,a:0},{n:174.61,s:130.81,a:1},{n:130.81,s:0,a:0},{n:261.63,s:311.13,a:1},
+    {n:130.81,s:0,a:1},{n:207.65,s:0,a:0},{n:155.56,s:261.63,a:1},{n:261.63,s:0,a:1},
+    {n:130.81,s:0,a:0},{n:174.61,s:0,a:1},{n:207.65,s:311.13,a:1},{n:392,s:0,a:1}
   ];
   const total=Math.ceil(dur/step);
   for(let i=0;i<total;i++){
-    const s=i*step,p=AP[i%16],d=step*.9;
+    const s=i*step,p=AP[i%16],d=step*.8;
     // Bass
     const o=offline.createOscillator(),g=offline.createGain(),f=offline.createBiquadFilter();
-    o.connect(f);f.connect(g);g.connect(offline.destination);o.type='sawtooth';
+    o.connect(f);f.connect(g);g.connect(master);o.type='sawtooth';
     o.frequency.setValueAtTime(p.n,s);if(p.s)o.frequency.exponentialRampToValueAtTime(p.s,s+d*.7);
-    f.type='lowpass';f.Q.value=22;f.frequency.setValueAtTime(p.a?6000:2500,s);f.frequency.exponentialRampToValueAtTime(120,s+d*.9);
-    g.gain.setValueAtTime(p.a?.3:.15,s);g.gain.exponentialRampToValueAtTime(.001,s+d);
+    f.type='lowpass';f.Q.value=15;f.frequency.setValueAtTime(p.a?4000:1800,s);f.frequency.exponentialRampToValueAtTime(200,s+d*.9);
+    g.gain.setValueAtTime(p.a?.4:.2,s);g.gain.exponentialRampToValueAtTime(.001,s+d);
     o.start(s);o.stop(s+d+.05);
     // Kick
-    if(i%4===0){const ok=offline.createOscillator(),gk=offline.createGain();ok.connect(gk);gk.connect(offline.destination);ok.type='sine';ok.frequency.setValueAtTime(180,s);ok.frequency.exponentialRampToValueAtTime(25,s+.2);gk.gain.setValueAtTime(.5,s);gk.gain.exponentialRampToValueAtTime(.001,s+.3);ok.start(s);ok.stop(s+.4)}
+    if(i%4===0){const ok=offline.createOscillator(),gk=offline.createGain();ok.connect(gk);gk.connect(master);ok.type='sine';ok.frequency.setValueAtTime(150,s);ok.frequency.exponentialRampToValueAtTime(30,s+.15);gk.gain.setValueAtTime(.6,s);gk.gain.exponentialRampToValueAtTime(.001,s+.25);ok.start(s);ok.stop(s+.3)}
     // Clap
-    if(i%8===4){const b=offline.createBuffer(1,sr*.08,sr),c=b.getChannelData(0);for(let j=0;j<c.length;j++)c[j]=Math.random()*2-1;const bs=offline.createBufferSource(),gc=offline.createGain(),fc=offline.createBiquadFilter();bs.buffer=b;bs.connect(fc);fc.connect(gc);gc.connect(offline.destination);fc.type='bandpass';fc.frequency.value=1500;fc.Q.value=3;gc.gain.setValueAtTime(.2,s);gc.gain.exponentialRampToValueAtTime(.001,s+.1);bs.start(s)}
+    if(i%8===4){const b=offline.createBuffer(1,sr*.06,sr),c=b.getChannelData(0);for(let j=0;j<c.length;j++)c[j]=(Math.random()*2-1)*.5;const bs=offline.createBufferSource(),gc=offline.createGain(),fc=offline.createBiquadFilter();bs.buffer=b;bs.connect(fc);fc.connect(gc);gc.connect(master);fc.type='bandpass';fc.frequency.value=1200;fc.Q.value=2;gc.gain.setValueAtTime(.3,s);gc.gain.exponentialRampToValueAtTime(.001,s+.08);bs.start(s)}
     // Hat
-    const hl=i%2===0?.06:.03;const hb=offline.createBuffer(1,sr*hl,sr),hc=hb.getChannelData(0);for(let j=0;j<hc.length;j++)hc[j]=Math.random()*2-1;const hs=offline.createBufferSource(),hg=offline.createGain(),hf=offline.createBiquadFilter();hs.buffer=hb;hs.connect(hf);hf.connect(hg);hg.connect(offline.destination);hf.type='highpass';hf.frequency.value=9000;hg.gain.setValueAtTime(.1,s);hg.gain.exponentialRampToValueAtTime(.001,s+hl);hs.start(s);
+    if(i%2===0){const hl=.04;const hb=offline.createBuffer(1,sr*hl,sr),hc=hb.getChannelData(0);for(let j=0;j<hc.length;j++)hc[j]=(Math.random()*2-1)*.3;const hs=offline.createBufferSource(),hg=offline.createGain(),hf=offline.createBiquadFilter();hs.buffer=hb;hs.connect(hf);hf.connect(hg);hg.connect(master);hf.type='highpass';hf.frequency.value=8000;hg.gain.setValueAtTime(.15,s);hg.gain.exponentialRampToValueAtTime(.001,s+hl);hs.start(s)}
   }
   offline.startRendering().then(buffer=>{
     // Convert AudioBuffer to WAV blob
